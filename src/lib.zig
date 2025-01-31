@@ -11,7 +11,9 @@ pub fn read_header(allocator: std.mem.Allocator, reader: std.io.AnyReader) !std.
     // Read whole header into memory
     const header_len = try reader.readInt(u64, .little);
     const header_buf = try allocator.alloc(u8, header_len); // No dealloc because the strings will be directly pointed here
-    _ = try reader.readAtLeast(header_buf, header_len);
+    const read_len = try reader.read(header_buf);
+    if (header_len != read_len)
+        return error.UnableToReadFullHeader;
 
     // Parse the metadata into ordered hashmap
     var scanner = json.Scanner.initCompleteInput(allocator, header_buf);
@@ -36,7 +38,7 @@ pub fn read_header(allocator: std.mem.Allocator, reader: std.io.AnyReader) !std.
                 try header.putNoClobber(key, tensor_info); // Insert with check that the key doesn't already exist
             },
             .object_end => break,
-            else => unreachable,
+            else => return error.UnexpectedToken,
         }
     }
     return header;
