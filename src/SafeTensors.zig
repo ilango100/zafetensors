@@ -28,7 +28,6 @@ const TensorInfo = struct {
 
 allocator: std.mem.Allocator,
 file: std.fs.File,
-header_buf: []u8,
 byte_buffer_pos: u64 = undefined,
 header: std.StringArrayHashMap(TensorInfo),
 
@@ -36,11 +35,11 @@ const Self = @This();
 
 pub fn openFile(allocator: std.mem.Allocator, file: std.fs.File) !Self {
     const header_buf = try load_header_buf(allocator, file);
+    defer allocator.free(header_buf);
     const header = try parse_header(allocator, header_buf);
     return Self{
         .allocator = allocator,
         .file = file,
-        .header_buf = header_buf,
         .byte_buffer_pos = header_buf.len + 8,
         .header = header,
     };
@@ -49,10 +48,10 @@ pub fn openFile(allocator: std.mem.Allocator, file: std.fs.File) !Self {
 pub fn deinit(self: *Self) void {
     var it = self.header.iterator();
     while (it.next()) |entry| {
+        self.allocator.free(entry.key_ptr.*);
         self.allocator.free(entry.value_ptr.shape);
     }
     self.header.deinit();
-    self.allocator.free(self.header_buf);
     self.file.close();
 }
 
@@ -101,7 +100,8 @@ fn parse_header(allocator: std.mem.Allocator, header_buf: []u8) !std.StringArray
                 );
 
                 // Insert only new keys
-                try header.putNoClobber(key, TensorInfo{
+                const tensor_key = try allocator.dupe(u8, key);
+                try header.putNoClobber(tensor_key, TensorInfo{
                     .dtype = std.meta.stringToEnum(DType, tinfo.dtype).?,
                     .shape = tinfo.shape,
                     .offset = tinfo.data_offsets[0],
