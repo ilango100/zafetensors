@@ -33,9 +33,9 @@ header: std.StringArrayHashMap(TensorInfo),
 const Self = @This();
 
 pub fn openFile(allocator: std.mem.Allocator, file: std.fs.File) !Self {
-    const header_buf = try load_header_buf(allocator, file);
+    const header_buf = try loadHeaderBuf(allocator, file);
     defer allocator.free(header_buf);
-    const header = try parse_header(allocator, header_buf);
+    const header = try parseHeader(allocator, header_buf);
     return Self{
         .allocator = allocator,
         .file = file,
@@ -53,7 +53,7 @@ pub fn deinit(self: *Self) void {
     self.file.close();
 }
 
-fn load_header_buf(allocator: std.mem.Allocator, file: std.fs.File) ![]u8 {
+fn loadHeaderBuf(allocator: std.mem.Allocator, file: std.fs.File) ![]u8 {
     // Load whole header into memory
     const reader = file.reader();
     const header_len = try reader.readInt(u64, .little);
@@ -64,7 +64,7 @@ fn load_header_buf(allocator: std.mem.Allocator, file: std.fs.File) ![]u8 {
     return header_buf;
 }
 
-fn parse_header(allocator: std.mem.Allocator, header_buf: []u8) !std.StringArrayHashMap(TensorInfo) {
+fn parseHeader(allocator: std.mem.Allocator, header_buf: []u8) !std.StringArrayHashMap(TensorInfo) {
     // Parse the header into ordered hashmap
     var scanner = json.Scanner.initCompleteInput(allocator, header_buf);
     defer scanner.deinit();
@@ -115,7 +115,7 @@ fn parse_header(allocator: std.mem.Allocator, header_buf: []u8) !std.StringArray
     return header;
 }
 
-pub fn load_tensor(self: Self, name: []const u8) ![]align(8) u8 {
+pub fn loadTensor(self: Self, name: []const u8) ![]align(8) u8 {
     // Lookup tensor in the header
     const tinfo = self.header.get(name) orelse return error.TensorNotFound;
     const buf = try self.allocator.alignedAlloc(u8, 8, tinfo.len);
