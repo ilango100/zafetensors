@@ -27,59 +27,51 @@ const TensorInfo = struct {
 };
 
 allocator: std.mem.Allocator,
-header_buf: ?[]u8 = null,
+file: std.fs.File,
+header_buf: []u8,
 byte_buffer_pos: u64 = undefined,
-header: ?std.StringArrayHashMap(TensorInfo) = null,
-file: ?std.fs.File = null,
+header: std.StringArrayHashMap(TensorInfo),
 
 const Self = @This();
 
-pub fn load(allocator: std.mem.Allocator, file: std.fs.File) !Self {
-    var self = Self{
+pub fn openFile(allocator: std.mem.Allocator, file: std.fs.File) !Self {
+    const header_buf = try load_header_buf(allocator, file);
+    const header = try parse_header(allocator, header_buf);
+    return Self{
         .allocator = allocator,
         .file = file,
+        .header_buf = header_buf,
+        .byte_buffer_pos = header_buf.len + 8,
+        .header = header,
     };
-    try self.load_header_buf();
-    try self.parse_header();
-    return self;
 }
 
 pub fn deinit(self: *Self) void {
-    if (self.header) |*header| {
-        var it = header.iterator();
-        while (it.next()) |entry| {
-            self.allocator.free(entry.value_ptr.shape);
-        }
-        header.deinit();
-        self.header = null;
+    var it = self.header.iterator();
+    while (it.next()) |entry| {
+        self.allocator.free(entry.value_ptr.shape);
     }
-    if (self.header_buf) |header_buf| {
-        self.allocator.free(header_buf);
-        self.header_buf = null;
-    }
-    if (self.file) |file| {
-        file.close();
-        self.file = null;
-    }
+    self.header.deinit();
+    self.allocator.free(self.header_buf);
+    self.file.close();
 }
 
-fn load_header_buf(self: *Self) !void {
+fn load_header_buf(allocator: std.mem.Allocator, file: std.fs.File) ![]u8 {
     // Load whole header into memory
-    const reader = self.file.?.reader();
+    const reader = file.reader();
     const header_len = try reader.readInt(u64, .little);
-    const header_buf = try self.allocator.alloc(u8, header_len);
+    const header_buf = try allocator.alloc(u8, header_len);
     const read_len = try reader.read(header_buf);
     if (read_len != header_len)
         return error.UnableToLoadFullHeader;
-    self.header_buf = header_buf;
-    self.byte_buffer_pos = header_len + 8;
+    return header_buf;
 }
 
-fn parse_header(self: *Self) !void {
+fn parse_header(allocator: std.mem.Allocator, header_buf: []u8) !std.StringArrayHashMap(TensorInfo) {
     // Parse the header into ordered hashmap
-    var scanner = json.Scanner.initCompleteInput(self.allocator, self.header_buf.?);
+    var scanner = json.Scanner.initCompleteInput(allocator, header_buf);
     defer scanner.deinit();
-    var header = std.StringArrayHashMap(TensorInfo).init(self.allocator);
+    var header = std.StringArrayHashMap(TensorInfo).init(allocator);
     var token = try scanner.next();
     if (token != .object_begin) // Must be an object
         return error.UnexpectedToken;
@@ -103,7 +95,7 @@ fn parse_header(self: *Self) !void {
                         shape: []u64,
                         data_offsets: [2]u64,
                     },
-                    self.allocator,
+                    allocator,
                     &scanner,
                     .{ .max_value_len = json.default_max_value_len, .allocate = .alloc_if_needed },
                 );
@@ -115,13 +107,13 @@ fn parse_header(self: *Self) !void {
                     .offset = tinfo.data_offsets[0],
                     .len = tinfo.data_offsets[1] - tinfo.data_offsets[0],
                 });
-                self.allocator.free(tinfo.dtype);
+                allocator.free(tinfo.dtype);
             },
             .object_end => break,
             else => return error.UnexpectedToken,
         }
     }
-    self.header = header;
+    return header;
 }
 
 pub fn load_tensor(self: Self, name: []u8) ![]u8 {
