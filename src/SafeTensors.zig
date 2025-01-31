@@ -1,10 +1,29 @@
 const std = @import("std");
 const json = std.json;
 
+const DType = enum {
+    F64,
+    F32,
+    F16,
+    BF16,
+    I64,
+    U64,
+    I32,
+    U32,
+    I16,
+    U16,
+    I8,
+    U8,
+    BOOL,
+    F8_E4M3,
+    F8_E5M2,
+};
+
 const TensorInfo = struct {
-    dtype: []u8,
+    dtype: DType,
     shape: []u64,
-    data_offsets: [2]u64,
+    offset: u64,
+    len: u64,
 };
 
 allocator: std.mem.Allocator,
@@ -30,7 +49,6 @@ pub fn deinit(self: *Self) void {
         var it = header.iterator();
         while (it.next()) |entry| {
             self.allocator.free(entry.value_ptr.shape);
-            self.allocator.free(entry.value_ptr.dtype);
         }
         header.deinit();
         self.header = null;
@@ -46,25 +64,19 @@ pub fn deinit(self: *Self) void {
 }
 
 fn load_header_buf(self: *Self) !void {
-    if (self.header_buf != null) {
-        return;
-    }
     // Load whole header into memory
     const reader = self.file.?.reader();
     const header_len = try reader.readInt(u64, .little);
     const header_buf = try self.allocator.alloc(u8, header_len);
     const read_len = try reader.read(header_buf);
-    if (header_len != read_len)
+    if (read_len != header_len)
         return error.UnableToLoadFullHeader;
     self.header_buf = header_buf;
     self.byte_buffer_pos = header_len + 8;
 }
 
 fn parse_header(self: *Self) !void {
-    if (self.header != null) {
-        return;
-    }
-    // Parse the metadata into ordered hashmap
+    // Parse the header into ordered hashmap
     var scanner = json.Scanner.initCompleteInput(self.allocator, self.header_buf.?);
     defer scanner.deinit();
     var header = std.StringArrayHashMap(TensorInfo).init(self.allocator);
@@ -77,14 +89,33 @@ fn parse_header(self: *Self) !void {
         token = try scanner.next();
         switch (token) {
             .string => |key| {
+
                 // Skip special metadata
                 if (std.mem.eql(u8, key, "__metadata__")) {
                     try scanner.skipValue();
                     continue;
                 }
+
                 // Load object corresponding to the key
-                const tensor_info = try json.innerParse(TensorInfo, self.allocator, &scanner, .{ .max_value_len = json.default_max_value_len, .allocate = .alloc_if_needed });
-                try header.putNoClobber(key, tensor_info); // Insert with check that the key doesn't already exist
+                const tinfo = try json.innerParse(
+                    struct {
+                        dtype: []u8,
+                        shape: []u64,
+                        data_offsets: [2]u64,
+                    },
+                    self.allocator,
+                    &scanner,
+                    .{ .max_value_len = json.default_max_value_len, .allocate = .alloc_if_needed },
+                );
+
+                // Insert only new keys
+                try header.putNoClobber(key, TensorInfo{
+                    .dtype = std.meta.stringToEnum(DType, tinfo.dtype).?,
+                    .shape = tinfo.shape,
+                    .offset = tinfo.data_offsets[0],
+                    .len = tinfo.data_offsets[1] - tinfo.data_offsets[0],
+                });
+                self.allocator.free(tinfo.dtype);
             },
             .object_end => break,
             else => return error.UnexpectedToken,
@@ -98,14 +129,10 @@ pub fn load_tensor(self: Self, name: []u8) ![]u8 {
     const header = self.header orelse return error.HeaderNotInitialized;
     const tinfo = header.get(name) orelse return error.TensorNotFound;
 
-    const begin = tinfo.data_offsets[0];
-    const end = tinfo.data_offsets[1];
-    const len = end - begin;
-
-    const buf = try self.allocator.alloc(u8, len);
-    try self.file.seekTo(begin);
+    const buf = try self.allocator.alloc(u8, tinfo.len);
+    try self.file.seekTo(tinfo.offset);
     const read_len = try self.file.read(buf);
-    if (len != read_len)
+    if (read_len != tinfo.len)
         return error.UnableToLoadFullTensor;
     return buf;
 }

@@ -13,6 +13,6 @@ pub fn main() !void {
 
     var it = st.header.?.iterator();
     while (it.next()) |entry| {
-        std.debug.print("{s}, {s}, {any}\n", .{ entry.key_ptr.*, entry.value_ptr.dtype, entry.value_ptr.shape });
+        std.debug.print("{s}, {}, {any}\n", .{ entry.key_ptr.*, entry.value_ptr.dtype, entry.value_ptr.shape });
     }
 }
