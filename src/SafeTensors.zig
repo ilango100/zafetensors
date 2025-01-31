@@ -28,7 +28,6 @@ const TensorInfo = struct {
 
 allocator: std.mem.Allocator,
 file: std.fs.File,
-byte_buffer_pos: u64 = undefined,
 header: std.StringArrayHashMap(TensorInfo),
 
 const Self = @This();
@@ -40,7 +39,6 @@ pub fn openFile(allocator: std.mem.Allocator, file: std.fs.File) !Self {
     return Self{
         .allocator = allocator,
         .file = file,
-        .byte_buffer_pos = header_buf.len + 8,
         .header = header,
     };
 }
@@ -70,6 +68,7 @@ fn parse_header(allocator: std.mem.Allocator, header_buf: []u8) !std.StringArray
     // Parse the header into ordered hashmap
     var scanner = json.Scanner.initCompleteInput(allocator, header_buf);
     defer scanner.deinit();
+    const byte_buffer_pos = header_buf.len + 8;
     var header = std.StringArrayHashMap(TensorInfo).init(allocator);
     var token = try scanner.next();
     if (token != .object_begin) // Must be an object
@@ -104,7 +103,7 @@ fn parse_header(allocator: std.mem.Allocator, header_buf: []u8) !std.StringArray
                 try header.putNoClobber(tensor_key, TensorInfo{
                     .dtype = std.meta.stringToEnum(DType, tinfo.dtype).?,
                     .shape = tinfo.shape,
-                    .offset = tinfo.data_offsets[0],
+                    .offset = byte_buffer_pos + tinfo.data_offsets[0],
                     .len = tinfo.data_offsets[1] - tinfo.data_offsets[0],
                 });
                 allocator.free(tinfo.dtype);
@@ -116,12 +115,10 @@ fn parse_header(allocator: std.mem.Allocator, header_buf: []u8) !std.StringArray
     return header;
 }
 
-pub fn load_tensor(self: Self, name: []u8) ![]u8 {
+pub fn load_tensor(self: Self, name: []const u8) ![]align(8) u8 {
     // Lookup tensor in the header
-    const header = self.header orelse return error.HeaderNotInitialized;
-    const tinfo = header.get(name) orelse return error.TensorNotFound;
-
-    const buf = try self.allocator.alloc(u8, tinfo.len);
+    const tinfo = self.header.get(name) orelse return error.TensorNotFound;
+    const buf = try self.allocator.alignedAlloc(u8, 8, tinfo.len);
     try self.file.seekTo(tinfo.offset);
     const read_len = try self.file.read(buf);
     if (read_len != tinfo.len)
