@@ -1,5 +1,6 @@
 const std = @import("std");
 const SafeTensors = @import("SafeTensors.zig");
+const convert = @import("convert.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -12,7 +13,24 @@ pub fn main() !void {
     defer st.deinit();
 
     var it = st.header.iterator();
+    var i: u32 = 0;
     while (it.next()) |entry| {
-        std.debug.print("{s}, {}, {any}\n", .{ entry.key_ptr.*, entry.value_ptr.dtype, entry.value_ptr.shape });
+        std.debug.print("{s}\n", .{entry.key_ptr.*});
+        const buf = try st.loadTensor(entry.key_ptr.*);
+        defer allocator.free(buf);
+        switch (entry.value_ptr.dtype) {
+            .BF16 => {
+                const f16_buf = try convert.bf16ToFP32(allocator, buf);
+                defer allocator.free(f16_buf);
+                for (f16_buf[0..16]) |value| {
+                    std.debug.print("{e:.4} ", .{value});
+                }
+                std.debug.print("\n", .{});
+            },
+            else => unreachable,
+        }
+        i += 1;
+        if (i >= 2)
+            break;
     }
 }
