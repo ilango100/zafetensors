@@ -32,6 +32,13 @@ header: std.StringArrayHashMap(TensorInfo),
 
 const Self = @This();
 
+pub fn open(allocator: std.mem.Allocator, path: []const u8) !Self {
+    const abs_path = try std.fs.realpathAlloc(allocator, path);
+    defer allocator.free(abs_path);
+    const file = try std.fs.openFileAbsolute(abs_path, .{ .mode = .read_only });
+    return try openFile(allocator, file);
+}
+
 pub fn openFile(allocator: std.mem.Allocator, file: std.fs.File) !Self {
     const header_buf = try loadHeaderBuf(allocator, file);
     defer allocator.free(header_buf);
