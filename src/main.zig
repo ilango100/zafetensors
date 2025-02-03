@@ -1,6 +1,6 @@
 const std = @import("std");
 const sts = @import("SafeTensors.zig");
-const convert = @import("conversion.zig");
+const convert = @import("convert.zig");
 
 const usage =
     \\ Available subcommands:
