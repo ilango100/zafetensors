@@ -2,6 +2,11 @@ const std = @import("std");
 const SafeTensors = @import("SafeTensors.zig");
 const conversion = @import("conversion.zig");
 
+const usage =
+    \\ Available subcommands:
+    \\    show
+    \\    convert
+;
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -10,13 +15,17 @@ pub fn main() !void {
     var args = try std.process.argsWithAllocator(allocator);
     defer args.deinit();
     _ = args.next().?;
-    var exit_code = 0;
-    if (args.next()) |arg| {
-        if (std.mem.eql(u8, arg, "show")) {
-            exit_code = show(allocator, &args);
-        } else if (std.mem.eql(u8, arg, "convert")) {
-            exit_code = try convert(allocator, &args);
-        }
+    var exit_code: u8 = 0;
+    const command = args.next() orelse "";
+
+    // Call respective command
+    if (std.mem.eql(u8, command, "show")) {
+        exit_code = show(allocator, &args);
+    } else if (std.mem.eql(u8, command, "convert")) {
+        exit_code = try convert(allocator, &args);
+    } else {
+        std.debug.print("{s}\n", .{usage});
+        exit_code = 1;
     }
     std.process.exit(exit_code);
 }
