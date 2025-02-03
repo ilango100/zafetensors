@@ -31,7 +31,7 @@ pub fn show(allocator: std.mem.Allocator, args: *std.process.ArgIterator) u8 {
         std.debug.print("{s}\n", .{show_usage});
         return 1;
     };
-    const st = SafeTensors.open(allocator, path) catch |e| {
+    var st = SafeTensors.open(allocator, path) catch |e| {
         std.debug.print("Unable to open safetensors file: {}", .{e});
         return 1;
     };
@@ -85,4 +85,5 @@ pub fn convert(allocator: std.mem.Allocator, args: *std.process.ArgIterator) !u8
         if (i >= 2)
             break;
     }
+    return 0;
 }
