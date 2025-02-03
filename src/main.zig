@@ -1,12 +1,13 @@
 const std = @import("std");
-const SafeTensors = @import("SafeTensors.zig");
-const conversion = @import("conversion.zig");
+const sts = @import("SafeTensors.zig");
+const convert = @import("conversion.zig");
 
 const usage =
     \\ Available subcommands:
     \\    show
     \\    convert
 ;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -22,7 +23,7 @@ pub fn main() !void {
     if (std.mem.eql(u8, command, "show")) {
         exit_code = show(allocator, &args);
     } else if (std.mem.eql(u8, command, "convert")) {
-        exit_code = try convert(allocator, &args);
+        exit_code = try convert.convert(allocator, &args);
     } else {
         std.debug.print("{s}\n", .{usage});
         exit_code = 1;
@@ -40,7 +41,7 @@ pub fn show(allocator: std.mem.Allocator, args: *std.process.ArgIterator) u8 {
         std.debug.print("{s}\n", .{show_usage});
         return 1;
     };
-    var st = SafeTensors.open(allocator, path) catch |e| {
+    var st = sts.open(allocator, path) catch |e| {
         std.debug.print("Unable to open safetensors file: {}", .{e});
         return 1;
     };
@@ -48,51 +49,6 @@ pub fn show(allocator: std.mem.Allocator, args: *std.process.ArgIterator) u8 {
     var it = st.header.iterator();
     while (it.next()) |entry| {
         std.debug.print("{s} {} {any}\n", .{ entry.key_ptr.*, entry.value_ptr.dtype, entry.value_ptr.shape });
-    }
-    return 0;
-}
-
-const convert_usage =
-    \\ Usage: convert <file> <dtype>
-    \\  <file>: safetensors file path
-    \\  <dtype>: Dtype to convert to
-;
-
-pub fn convert(allocator: std.mem.Allocator, args: *std.process.ArgIterator) !u8 {
-    const path = args.next() orelse {
-        std.debug.print("{s}\n", .{convert_usage});
-        return 1;
-    };
-    const dtype = args.next() orelse {
-        std.debug.print("{s}\n", .{convert_usage});
-        return 1;
-    };
-
-    std.debug.print("convert {s} {s}\n", .{ path, dtype });
-
-    var st = try SafeTensors.open(allocator, path);
-    defer st.deinit();
-
-    var it = st.header.iterator();
-    var i: u32 = 0;
-    while (it.next()) |entry| {
-        std.debug.print("{s}\n", .{entry.key_ptr.*});
-        const buf = try st.loadTensor(entry.key_ptr.*);
-        defer allocator.free(buf);
-        switch (entry.value_ptr.dtype) {
-            .BF16 => {
-                const f16_buf = try conversion.bf16ToFP32(allocator, buf);
-                defer allocator.free(f16_buf);
-                for (f16_buf[0..16]) |value| {
-                    std.debug.print("{e:.4} ", .{value});
-                }
-                std.debug.print("\n", .{});
-            },
-            else => unreachable,
-        }
-        i += 1;
-        if (i >= 2)
-            break;
     }
     return 0;
 }
