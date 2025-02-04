@@ -33,9 +33,7 @@ header: std.StringArrayHashMap(TensorInfo),
 const Self = @This();
 
 pub fn open(allocator: std.mem.Allocator, path: []const u8) !Self {
-    const abs_path = try std.fs.realpathAlloc(allocator, path);
-    defer allocator.free(abs_path);
-    const file = try std.fs.openFileAbsolute(abs_path, .{ .mode = .read_only });
+    const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
     return try openFile(allocator, file);
 }
 
@@ -71,7 +69,7 @@ fn loadHeaderBuf(allocator: std.mem.Allocator, file: std.fs.File) ![]u8 {
     return header_buf;
 }
 
-fn parseHeader(allocator: std.mem.Allocator, header_buf: []u8) !std.StringArrayHashMap(TensorInfo) {
+fn parseHeader(allocator: std.mem.Allocator, header_buf: []const u8) !std.StringArrayHashMap(TensorInfo) {
     // Parse the header into ordered hashmap
     var scanner = json.Scanner.initCompleteInput(allocator, header_buf);
     defer scanner.deinit();
