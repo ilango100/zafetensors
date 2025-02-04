@@ -22,8 +22,8 @@ const DType = enum {
 const TensorInfo = struct {
     dtype: DType,
     shape: []u64,
-    offset: u64,
-    len: u64,
+    offset: u64 = 0,
+    len: u64 = 0,
 };
 
 allocator: std.mem.Allocator,
@@ -155,4 +155,57 @@ pub fn loadTensor(self: Self, name: []const u8) ![]align(8) u8 {
     if (read_len != tinfo.len)
         return error.UnableToLoadFullTensor;
     return buf;
+}
+
+pub fn writeHeader(self: Self) !void {
+    // Write initial length as 0, to be re-written later
+    try self.file.seekTo(0);
+    try self.file.writer().writeInt(u64, self.byte_buffer_offset, .little);
+
+    // Write the actual header
+    var writer = json.writeStream(self.file, .{});
+    try writer.beginObject();
+    var it = self.header.iterator();
+    var tensor_offset = 0;
+    while (it.next()) |entry| {
+        // Write the tensor name as key
+        try writer.objectField(entry.key_ptr.*);
+
+        // Compute tensor buffer length
+        var tensor_len = 1;
+        for (entry.value_ptr.shape) |dim_shape| {
+            tensor_len *= dim_shape;
+        }
+        tensor_len *= switch (entry.value_ptr.dtype) {
+            .BOOL, .F8_E4M3, .F8_E5M2, .U8, .I8 => 1,
+            .F16, .BF16, .U16, .I16 => 2,
+            .F32, .U32, .I32 => 4,
+            .F64, .U64, .I64 => 8,
+        };
+
+        // Overwrite correct values
+        entry.value_ptr.offset = tensor_offset;
+        entry.value_ptr.len = tensor_len;
+
+        // Write the entry
+        const dtype = std.enums.tagName(DType, entry.value_ptr.dtype).?;
+        try writer.write(.{
+            .dtype = dtype,
+            .shape = entry.value_ptr.shape,
+            .data_offsets = [2]u64{
+                tensor_offset,
+                tensor_offset + tensor_len,
+            },
+        });
+
+        // Update offset for next tensor
+        tensor_offset += tensor_len;
+    }
+
+    // Re-write the correct header length
+    self.byte_buffer_offset = try self.file.getPos();
+    const header_len = self.byte_buffer_offset - 8;
+    try self.file.seekTo(0);
+    try self.file.writer().writeInt(u64, header_len, .little);
+    try self.file.seekFromEnd(0);
 }
