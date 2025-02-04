@@ -29,6 +29,7 @@ const TensorInfo = struct {
 allocator: std.mem.Allocator,
 file: std.fs.File,
 header: std.StringArrayHashMap(TensorInfo),
+byte_buffer_offset: u64,
 
 const Self = @This();
 
@@ -45,6 +46,7 @@ pub fn openFile(allocator: std.mem.Allocator, file: std.fs.File) !Self {
         .allocator = allocator,
         .file = file,
         .header = header,
+        .byte_buffer_offset = header_buf.len + 8,
     };
 }
 
@@ -73,7 +75,6 @@ fn parseHeader(allocator: std.mem.Allocator, header_buf: []const u8) !std.String
     // Parse the header into ordered hashmap
     var scanner = json.Scanner.initCompleteInput(allocator, header_buf);
     defer scanner.deinit();
-    const byte_buffer_pos = header_buf.len + 8;
     var header = std.StringArrayHashMap(TensorInfo).init(allocator);
     var token = try scanner.next();
     if (token != .object_begin) // Must be an object
@@ -108,7 +109,7 @@ fn parseHeader(allocator: std.mem.Allocator, header_buf: []const u8) !std.String
                 try header.putNoClobber(tensor_key, TensorInfo{
                     .dtype = std.meta.stringToEnum(DType, tinfo.dtype).?,
                     .shape = tinfo.shape,
-                    .offset = byte_buffer_pos + tinfo.data_offsets[0],
+                    .offset = tinfo.data_offsets[0],
                     .len = tinfo.data_offsets[1] - tinfo.data_offsets[0],
                 });
                 allocator.free(tinfo.dtype);
@@ -136,7 +137,7 @@ pub fn loadTensor(self: Self, name: []const u8) ![]align(8) u8 {
     // Lookup tensor in the header
     const tinfo = self.header.get(name) orelse return error.TensorNotFound;
     const buf = try self.allocator.alignedAlloc(u8, 8, tinfo.len);
-    try self.file.seekTo(tinfo.offset);
+    try self.file.seekTo(self.byte_buffer_offset + tinfo.offset);
     const read_len = try self.file.read(buf);
     if (read_len != tinfo.len)
         return error.UnableToLoadFullTensor;
