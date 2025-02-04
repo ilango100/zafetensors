@@ -29,7 +29,7 @@ const TensorInfo = struct {
 allocator: std.mem.Allocator,
 file: std.fs.File,
 header: std.StringArrayHashMap(TensorInfo),
-byte_buffer_offset: u64,
+byte_buffer_offset: u64 = undefined,
 
 const Self = @This();
 
@@ -47,6 +47,19 @@ pub fn openFile(allocator: std.mem.Allocator, file: std.fs.File) !Self {
         .file = file,
         .header = header,
         .byte_buffer_offset = header_buf.len + 8,
+    };
+}
+
+pub fn create(allocator: std.mem.Allocator, path: []const u8) !Self {
+    const file = try std.fs.cwd().createFile(path, .{});
+    return try createFile(allocator, file);
+}
+
+pub fn createFile(allocator: std.mem.Allocator, file: std.fs.File) !Self {
+    return Self{
+        .allocator = allocator,
+        .file = file,
+        .header = std.StringArrayHashMap(TensorInfo).init(allocator),
     };
 }
 
