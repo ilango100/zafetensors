@@ -1,5 +1,5 @@
 const std = @import("std");
-const zts = @import("ZafeTensors.zig");
+const SafeTensors = @import("SafeTensors.zig");
 
 const convert_usage =
     \\ Usage: convert <in_file> <out_file>
@@ -18,10 +18,10 @@ pub fn convert(allocator: std.mem.Allocator, args: *std.process.ArgIterator) !u8
         return 1;
     };
 
-    var in_st = try zts.open(allocator, in_path);
+    var in_st = try SafeTensors.open(allocator, in_path);
     defer in_st.deinit();
 
-    var out_st = try zts.create(allocator, out_path);
+    var out_st = try SafeTensors.create(allocator, out_path);
     defer out_st.deinit();
 
     // Update output file header
