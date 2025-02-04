@@ -214,12 +214,12 @@ pub fn writeHeader(self: Self) !void {
 }
 
 pub fn writeTensor(self: Self, name: []const u8, data: []u8) !void {
-    const tInfo = self.header.get(name).?;
-    if (self.byte_buffer_offset == 0 or (tInfo.offset == 0 and tInfo.len == 0)) {
+    const tinfo = self.header.get(name).?;
+    if (self.byte_buffer_offset == 0 or (tinfo.offset == 0 and tinfo.len == 0)) {
         return error.HeaderNotWritten;
     }
-    try self.file.seekTo(self.byte_buffer_offset + tInfo.offset);
+    try self.file.seekTo(self.byte_buffer_offset + tinfo.offset);
     const written_len = try self.file.write(data);
-    const computed_len = computeTensorBufferLength(tInfo);
+    const computed_len = computeTensorBufferLength(tinfo);
     std.debug.assert(written_len == computed_len);
 }
