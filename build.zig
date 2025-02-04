@@ -21,4 +21,14 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    const compile_test = b.addTest(.{
+        .root_source_file = b.path("src/SafeTensors.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_test = b.addRunArtifact(compile_test);
+
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&run_test.step);
 }

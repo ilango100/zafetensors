@@ -120,6 +120,18 @@ fn parseHeader(allocator: std.mem.Allocator, header_buf: []const u8) !std.String
     return header;
 }
 
+test "parse_header" {
+    const t_allocator = std.testing.allocator;
+    try std.testing.expectError(error.UnexpectedEndOfInput, parseHeader(t_allocator, ""));
+    try std.testing.expectError(error.UnexpectedToken, parseHeader(t_allocator, "[]"));
+    var hmap = try parseHeader(t_allocator, "{}");
+    try std.testing.expectEqual(0, hmap.count());
+    hmap = try parseHeader(t_allocator, "{\"__metadata__\": [1, 2, 3]}");
+    try std.testing.expectEqual(0, hmap.count());
+    try std.testing.expectError(error.UnexpectedToken, parseHeader(t_allocator, "{\"key\": [1, 2, 3]}"));
+    try std.testing.expectError(error.MissingField, parseHeader(t_allocator, "{\"key\": {\"data_offsets\":[1, 2]}}"));
+}
+
 pub fn loadTensor(self: Self, name: []const u8) ![]align(8) u8 {
     // Lookup tensor in the header
     const tinfo = self.header.get(name) orelse return error.TensorNotFound;
