@@ -1,5 +1,5 @@
 const std = @import("std");
-const sts = @import("SafeTensors.zig");
+const zts = @import("ZafeTensors.zig");
 const convert = @import("convert.zig");
 
 const usage =
@@ -41,7 +41,7 @@ pub fn show(allocator: std.mem.Allocator, args: *std.process.ArgIterator) u8 {
         std.debug.print("{s}\n", .{show_usage});
         return 1;
     };
-    var st = sts.open(allocator, path) catch |e| {
+    var st = zts.open(allocator, path) catch |e| {
         std.debug.print("Unable to open safetensors file: {}", .{e});
         return 1;
     };
