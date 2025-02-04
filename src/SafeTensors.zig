@@ -157,6 +157,20 @@ pub fn loadTensor(self: Self, name: []const u8) ![]align(8) u8 {
     return buf;
 }
 
+fn computeTensorBufferLength(tinfo: TensorInfo) u64 {
+    var tbuf_len: u64 = 1;
+    for (tinfo.shape) |dim_shape| {
+        tbuf_len *= dim_shape;
+    }
+    tbuf_len *= switch (tinfo.dtype) {
+        .BOOL, .F8_E4M3, .F8_E5M2, .U8, .I8 => 1,
+        .F16, .BF16, .U16, .I16 => 2,
+        .F32, .U32, .I32 => 4,
+        .F64, .U64, .I64 => 8,
+    };
+    return tbuf_len;
+}
+
 pub fn writeHeader(self: Self) !void {
     // Write initial length as 0, to be re-written later
     try self.file.seekTo(0);
@@ -171,19 +185,8 @@ pub fn writeHeader(self: Self) !void {
         // Write the tensor name as key
         try writer.objectField(entry.key_ptr.*);
 
-        // Compute tensor buffer length
-        var tensor_len = 1;
-        for (entry.value_ptr.shape) |dim_shape| {
-            tensor_len *= dim_shape;
-        }
-        tensor_len *= switch (entry.value_ptr.dtype) {
-            .BOOL, .F8_E4M3, .F8_E5M2, .U8, .I8 => 1,
-            .F16, .BF16, .U16, .I16 => 2,
-            .F32, .U32, .I32 => 4,
-            .F64, .U64, .I64 => 8,
-        };
-
-        // Overwrite correct values
+        // Compute tensor buffer length and update in header map
+        const tensor_len = computeTensorBufferLength(entry.value_ptr.*);
         entry.value_ptr.offset = tensor_offset;
         entry.value_ptr.len = tensor_len;
 
