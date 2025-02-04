@@ -29,7 +29,7 @@ const TensorInfo = struct {
 allocator: std.mem.Allocator,
 file: std.fs.File,
 header: std.StringArrayHashMap(TensorInfo),
-byte_buffer_offset: u64 = undefined,
+byte_buffer_offset: u64 = 0,
 
 const Self = @This();
 
@@ -211,4 +211,15 @@ pub fn writeHeader(self: Self) !void {
     try self.file.seekTo(0);
     try self.file.writer().writeInt(u64, header_len, .little);
     try self.file.seekFromEnd(0);
+}
+
+pub fn writeTensor(self: Self, name: []const u8, data: []u8) !void {
+    const tInfo = self.header.get(name).?;
+    if (self.byte_buffer_offset == 0 or (tInfo.offset == 0 and tInfo.len == 0)) {
+        return error.HeaderNotWritten;
+    }
+    try self.file.seekTo(self.byte_buffer_offset + tInfo.offset);
+    const written_len = try self.file.write(data);
+    const computed_len = computeTensorBufferLength(tInfo);
+    std.debug.assert(written_len == computed_len);
 }
