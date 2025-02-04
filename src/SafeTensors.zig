@@ -171,16 +171,16 @@ fn computeTensorBufferLength(tinfo: TensorInfo) u64 {
     return tbuf_len;
 }
 
-pub fn writeHeader(self: Self) !void {
+pub fn writeHeader(self: *Self) !void {
     // Write initial length as 0, to be re-written later
     try self.file.seekTo(0);
     try self.file.writer().writeInt(u64, self.byte_buffer_offset, .little);
 
     // Write the actual header
-    var writer = json.writeStream(self.file, .{});
+    var writer = json.writeStream(self.file.writer(), .{});
     try writer.beginObject();
     var it = self.header.iterator();
-    var tensor_offset = 0;
+    var tensor_offset: u64 = 0;
     while (it.next()) |entry| {
         // Write the tensor name as key
         try writer.objectField(entry.key_ptr.*);
@@ -204,6 +204,7 @@ pub fn writeHeader(self: Self) !void {
         // Update offset for next tensor
         tensor_offset += tensor_len;
     }
+    try writer.endObject();
 
     // Re-write the correct header length
     self.byte_buffer_offset = try self.file.getPos();
